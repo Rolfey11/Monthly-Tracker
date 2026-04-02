@@ -142,8 +142,9 @@ table.daily{width:100%;border-collapse:collapse;min-width:700px;}
 table.daily thead th{background:var(--surface2);color:var(--text3);font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:10px 14px;border-bottom:1px solid var(--border);text-align:left;white-space:nowrap;}
 table.daily tbody tr{border-bottom:1px solid var(--border);transition:background .1s;}
 table.daily tbody tr:hover{background:var(--surface2);}
-table.daily tbody tr.holiday-row td{ opacity:.6; }
-table.daily tbody tr.holiday-row td:first-child{ border-left:2px solid var(--amber); }
+table.daily tbody tr.holiday-row{ opacity:.45; pointer-events:none; }
+table.daily tbody tr.holiday-row td:first-child{ border-left:2px solid var(--amber); opacity:1; }
+table.daily tbody tr.holiday-row .h-btn{ pointer-events:all; opacity:1; }
 table.daily tbody tr.weekend{opacity:.4;}
 table.daily tbody tr.today td:first-child{border-left:2px solid var(--green);}
 table.daily tbody tr.has-data{background:rgba(0,214,143,.03);}
@@ -969,7 +970,7 @@ function renderDailyTable(cid, mk, readOnly, stats){
     const dow=new Date(ds+'T12:00:00').getDay();
     const wknd=dow===0||dow===6;
     const bh=UK_BH.has(ds);
-    const entry=Object.values(entries).find(e=>e.date===ds)||{date:ds,risk:0,nm:0,swift:'',plps:'',holiday:false};
+    const entry=Object.values(entries).find(e=>e.date===ds)||{date:ds,risk:0,nm:0,swift:'',plps:'',holiday:false}; if(entry&&entry.holiday===undefined) entry.holiday=false;
     const eId=Object.keys(entries).find(k=>entries[k].date===ds)||null;
     const risk=entry.risk||0;
     const nm=entry.nm||0;
@@ -1040,8 +1041,8 @@ function renderDailyTable(cid, mk, readOnly, stats){
         <td class="running ${cumNm>0?'pos':''}">${cumNm>0?cumNm:''}</td>
         ${accumNmCell}
         ${nmDiffCell}
-        <td><button class="btn btn-s" style="font-size:10px;padding:3px 8px;${hBtnStyle}" title="${isHoliday?'Remove holiday':'Mark as holiday'}"
-          onclick="toggleHoliday('${cid}','${mk}','${ds}','${eId||''}')">H</button></td>
+        <td><button class="btn btn-s h-btn" style="font-size:10px;padding:3px 8px;${hBtnStyle}" title="${isHoliday?'Remove holiday':'Mark as holiday'}"
+          onclick="event.stopPropagation();toggleHoliday('${cid}','${mk}','${ds}')">H</button></td>
       </tr>`;
     }
   }
@@ -1106,15 +1107,19 @@ function updateEntry(cid,mk,ds,field,val,existingId){
   deboundSave(cid,mk);
 }
 
-function toggleHoliday(cid,mk,ds,existingId){
+function toggleHoliday(cid,mk,ds){
   ensureMonthExists(cid,mk);
-  const entries=DATA.data[cid][mk].entries||{};
-  let eId=existingId||Object.keys(entries).find(k=>entries[k].date===ds);
-  if(!eId){ eId=uid(); }
-  if(!entries[eId]) entries[eId]={date:ds,risk:0,nm:0,swift:'',plps:'',holiday:false};
+  if(!DATA.data[cid][mk].entries) DATA.data[cid][mk].entries={};
+  const entries=DATA.data[cid][mk].entries;
+  let eId=Object.keys(entries).find(k=>entries[k].date===ds);
+  if(!eId){ eId=uid(); entries[eId]={date:ds,risk:0,nm:0,swift:'',plps:'',holiday:false}; }
   entries[eId].holiday=!entries[eId].holiday;
   DATA.data[cid][mk].entries=entries;
-  deboundSave(cid,mk);
+  renderTracker();
+  saveConsultantData(cid,mk,()=>{
+    const ind=document.getElementById('saveInd');
+    if(ind){ ind.style.display='inline'; setTimeout(()=>{ if(ind) ind.style.display='none'; },2000); }
+  });
 }
 
 // ═══════════════════════════════════════════════════════════════════
