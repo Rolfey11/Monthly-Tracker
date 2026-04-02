@@ -1,0 +1,1279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SALES.TRACK — Individual Performance Tracker</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<style>
+:root{
+  --bg:#060810;--surface:#0d1117;--surface2:#161b27;--surface3:#1e2535;
+  --border:rgba(255,255,255,0.06);--border2:rgba(255,255,255,0.12);
+  --text:#e8ecf4;--text2:#8892a4;--text3:#4a5568;
+  --green:#00d68f;--green-dim:rgba(0,214,143,0.12);
+  --red:#ff4d6d;--red-dim:rgba(255,77,109,0.12);
+  --amber:#ffb547;--amber-dim:rgba(255,181,71,0.12);
+  --blue:#4d9fff;--blue-dim:rgba(77,159,255,0.12);
+  --gold:#f5c842;--gold-dim:rgba(245,200,66,0.1);
+  --accent:#00d68f;
+  --fi:'Inter',sans-serif;--fm:'JetBrains Mono',monospace;
+  --r:10px;--r2:14px;
+  --sh:0 4px 24px rgba(0,0,0,.5);
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--text);font-family:var(--fi);min-height:100vh;overflow-x:hidden;}
+::-webkit-scrollbar{width:5px;height:5px;}
+::-webkit-scrollbar-thumb{background:var(--surface3);border-radius:3px;}
+
+/* ── LOADING ─────────────────────────────────────── */
+#loadingScreen{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;gap:24px;}
+.load-logo{font-size:28px;font-weight:800;letter-spacing:-.02em;color:var(--text);}
+.load-logo span{color:var(--green);}
+.load-bar{width:200px;height:2px;background:var(--surface3);border-radius:1px;overflow:hidden;}
+.load-fill{height:100%;width:0;background:linear-gradient(90deg,var(--green),var(--blue));border-radius:1px;animation:loadAnim 1.4s ease forwards;}
+@keyframes loadAnim{to{width:100%;}}
+
+/* ── LOGIN ────────────────────────────────────────── */
+#loginScreen{display:none;min-height:100vh;align-items:center;justify-content:center;padding:20px;
+  background:radial-gradient(ellipse at 20% 50%,rgba(0,214,143,.06) 0%,transparent 50%),
+             radial-gradient(ellipse at 80% 20%,rgba(77,159,255,.06) 0%,transparent 50%),var(--bg);}
+.login-wrap{width:100%;max-width:400px;}
+.login-brand{text-align:center;margin-bottom:40px;}
+.login-logo{font-size:32px;font-weight:800;letter-spacing:-.03em;color:var(--text);}
+.login-logo span{color:var(--green);}
+.login-tagline{font-size:12px;color:var(--text3);font-family:var(--fm);letter-spacing:.15em;text-transform:uppercase;margin-top:6px;}
+.login-card{background:var(--surface);border:1px solid var(--border2);border-radius:var(--r2);padding:32px;box-shadow:var(--sh);}
+.login-title{font-size:18px;font-weight:700;margin-bottom:6px;}
+.login-sub{font-size:12px;color:var(--text3);font-family:var(--fm);margin-bottom:28px;}
+.role-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:28px;}
+.role-btn{border:1px solid var(--border2);border-radius:var(--r);padding:16px;background:var(--surface2);cursor:pointer;transition:all .2s;text-align:center;}
+.role-btn:hover,.role-btn.sel{border-color:var(--green);background:var(--green-dim);}
+.role-icon{font-size:24px;margin-bottom:6px;}
+.role-label{font-size:12px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--text);}
+.role-sub{font-size:10px;color:var(--text3);margin-top:2px;}
+.field{margin-bottom:16px;}
+.field-lbl{font-size:10px;font-weight:700;color:var(--text3);letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px;}
+input[type=text],input[type=password],input[type=number],input[type=date],select,textarea{
+  width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;
+  padding:10px 14px;font-size:13px;font-family:var(--fi);color:var(--text);outline:none;transition:border-color .15s;}
+input:focus,select:focus,textarea:focus{border-color:var(--green);box-shadow:0 0 0 3px rgba(0,214,143,.08);}
+.pin-row{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:20px;}
+.pin-digit{text-align:center;font-size:22px;font-weight:700;font-family:var(--fm);letter-spacing:.1em;padding:12px 8px;}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:10px 20px;border-radius:8px;font-family:var(--fi);font-size:13px;font-weight:600;cursor:pointer;border:none;transition:all .15s;}
+.btn-p{background:var(--green);color:#000;}.btn-p:hover{background:#00f0a0;}
+.btn-s{background:var(--surface2);color:var(--text2);border:1px solid var(--border2);}.btn-s:hover{color:var(--text);border-color:var(--border2);}
+.btn-d{background:var(--red-dim);color:var(--red);border:1px solid rgba(255,77,109,.2);}.btn-d:hover{background:rgba(255,77,109,.2);}
+.btn-w{width:100%;}
+.login-err{font-size:12px;color:var(--red);font-family:var(--fm);margin-top:8px;min-height:16px;}
+.login-step{display:none;}.login-step.active{display:block;}
+
+/* ── MAIN APP ─────────────────────────────────────── */
+#app{display:none;}
+
+/* NAV */
+nav{position:sticky;top:0;z-index:100;background:rgba(6,8,16,.95);backdrop-filter:blur(20px);border-bottom:1px solid var(--border);padding:0 24px;display:flex;align-items:center;justify-content:space-between;height:56px;gap:12px;}
+.nav-brand{font-size:14px;font-weight:800;letter-spacing:-.02em;white-space:nowrap;color:var(--text);}
+.nav-brand span{color:var(--green);}
+.nav-center{display:flex;align-items:center;gap:6px;}
+.nav-tab{background:none;border:none;color:var(--text3);font-family:var(--fi);font-size:12px;font-weight:600;padding:5px 12px;border-radius:6px;cursor:pointer;transition:all .15s;white-space:nowrap;}
+.nav-tab:hover{color:var(--text2);background:var(--surface2);}
+.nav-tab.active{color:var(--green);background:var(--green-dim);box-shadow:inset 0 -2px 0 var(--green);}
+.nav-right{display:flex;align-items:center;gap:10px;}
+.nav-user{display:flex;align-items:center;gap:8px;padding:5px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;cursor:pointer;transition:all .15s;}
+.nav-user:hover{border-color:var(--border2);}
+.nav-av{width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,var(--green),var(--blue));display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#000;}
+.nav-name{font-size:12px;font-weight:600;}
+.nav-role{font-size:10px;color:var(--green);font-family:var(--fm);}
+.month-badge{background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:4px 10px;font-size:11px;font-weight:600;font-family:var(--fm);color:var(--text2);}
+
+/* PAGE */
+.page{display:none;padding:24px;}.page.active{display:block;}
+.page-head{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:24px;gap:12px;flex-wrap:wrap;}
+.page-title{font-size:22px;font-weight:800;letter-spacing:-.02em;}
+.page-sub{font-size:11px;color:var(--text3);font-family:var(--fm);margin-top:4px;}
+.page-actions{display:flex;gap:8px;flex-wrap:wrap;}
+
+/* KPI CARDS */
+.kpi-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:20px;}
+.kpi{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:16px 18px;position:relative;overflow:hidden;transition:all .2s;}
+.kpi::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;}
+.kpi.g::before{background:linear-gradient(90deg,var(--green),transparent);}
+.kpi.r::before{background:linear-gradient(90deg,var(--red),transparent);}
+.kpi.a::before{background:linear-gradient(90deg,var(--amber),transparent);}
+.kpi.b::before{background:linear-gradient(90deg,var(--blue),transparent);}
+.kpi.gold::before{background:linear-gradient(90deg,var(--gold),transparent);}
+.kpi-lbl{font-size:9px;font-weight:700;color:var(--text3);letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px;}
+.kpi-val{font-size:24px;font-weight:800;font-family:var(--fm);line-height:1;}
+.kpi-val.g{color:var(--green);}
+.kpi-val.r{color:var(--red);}
+.kpi-val.a{color:var(--amber);}
+.kpi-val.b{color:var(--blue);}
+.kpi-val.gold{color:var(--gold);}
+.kpi-sub{font-size:10px;color:var(--text3);margin-top:5px;font-family:var(--fm);}
+
+/* PROGRESS BANDS */
+.bands-wrap{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:18px 20px;margin-bottom:20px;}
+.bands-title{font-size:11px;font-weight:700;color:var(--text3);letter-spacing:.08em;text-transform:uppercase;margin-bottom:14px;}
+.bands-track{position:relative;height:28px;background:var(--surface3);border-radius:6px;overflow:hidden;margin-bottom:10px;}
+.bands-fill{position:absolute;left:0;top:0;height:100%;border-radius:6px;transition:width .8s cubic-bezier(.4,0,.2,1);}
+.band-markers{display:flex;justify-content:space-between;position:relative;}
+.band-mark{display:flex;flex-direction:column;align-items:center;gap:2px;}
+.band-pct{font-size:10px;font-weight:700;font-family:var(--fm);}
+.band-val{font-size:9px;color:var(--text3);font-family:var(--fm);}
+.band-line{position:absolute;top:-38px;height:28px;width:1px;background:rgba(255,255,255,.15);}
+.pct-achieved{font-size:13px;font-weight:700;color:var(--text);margin-top:6px;}
+
+/* SETUP PANEL */
+.setup-card{background:var(--surface);border:1px solid var(--border2);border-radius:var(--r);padding:20px;margin-bottom:20px;}
+.setup-title{font-size:13px;font-weight:700;margin-bottom:14px;color:var(--text);}
+.setup-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
+.setup-stat{background:var(--surface2);border-radius:8px;padding:12px 14px;}
+.setup-stat-lbl{font-size:9px;font-weight:700;color:var(--text3);letter-spacing:.08em;text-transform:uppercase;margin-bottom:4px;}
+.setup-stat-val{font-size:16px;font-weight:700;font-family:var(--fm);color:var(--text);}
+
+/* DAILY TABLE */
+.tbl-wrap{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;margin-bottom:20px;}
+.tbl-head-bar{padding:14px 18px;background:var(--surface2);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+.tbl-head-title{font-size:13px;font-weight:700;}
+.tbl-head-sub{font-size:11px;color:var(--text3);font-family:var(--fm);}
+table.daily{width:100%;border-collapse:collapse;min-width:700px;}
+table.daily thead th{background:var(--surface2);color:var(--text3);font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:10px 14px;border-bottom:1px solid var(--border);text-align:left;white-space:nowrap;}
+table.daily tbody tr{border-bottom:1px solid var(--border);transition:background .1s;}
+table.daily tbody tr:hover{background:var(--surface2);}
+table.daily tbody tr.weekend{opacity:.4;}
+table.daily tbody tr.today td:first-child{border-left:2px solid var(--green);}
+table.daily tbody tr.has-data{background:rgba(0,214,143,.03);}
+table.daily td{padding:7px 14px;font-size:12px;font-family:var(--fm);}
+table.daily td.day-lbl{font-weight:600;color:var(--text2);white-space:nowrap;font-family:var(--fi);}
+table.daily td.day-lbl.wknd{color:var(--text3);}
+table.daily td input{background:transparent;border:none;outline:none;width:100%;color:var(--text);font-family:var(--fm);font-size:12px;padding:0;}
+table.daily td input:focus{background:var(--surface3);border-radius:4px;padding:2px 6px;margin:-2px -6px;}
+table.daily td.running{color:var(--text2);}
+table.daily td.running.pos{color:var(--green);}
+table.daily tfoot td{padding:10px 14px;font-weight:700;font-family:var(--fm);font-size:12px;background:var(--surface3);}
+.save-indicator{display:none;font-size:10px;color:var(--green);font-family:var(--fm);}
+
+/* STATS PANEL */
+.stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px;}
+.stat-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);}
+.stat-row:last-child{border-bottom:none;}
+.stat-lbl{font-size:11px;color:var(--text3);}
+.stat-val{font-size:13px;font-weight:700;font-family:var(--fm);color:var(--text);}
+.stat-val.g{color:var(--green);}
+.stat-val.r{color:var(--red);}
+.stat-val.a{color:var(--amber);}
+
+/* MONTH PICKER */
+.month-selector{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+.month-btn{background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:5px 12px;font-size:11px;font-weight:600;cursor:pointer;transition:all .15s;color:var(--text2);font-family:var(--fm);}
+.month-btn:hover{border-color:var(--border2);color:var(--text);}
+.month-btn.active{border-color:var(--green);background:var(--green-dim);color:var(--green);}
+
+/* MANAGER PANEL */
+.mgr-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;margin-bottom:24px;}
+.consultant-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:18px;transition:all .2s;}
+.consultant-card:hover{border-color:var(--border2);transform:translateY(-1px);}
+.cc-top{display:flex;align-items:center;gap:12px;margin-bottom:14px;}
+.cc-av{width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;flex-shrink:0;}
+.cc-name{font-size:14px;font-weight:700;}
+.cc-username{font-size:10px;color:var(--green);font-family:var(--fm);}
+.cc-stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px;}
+.cc-stat{background:var(--surface2);border-radius:6px;padding:8px;}
+.cc-stat-l{font-size:9px;color:var(--text3);letter-spacing:.06em;text-transform:uppercase;margin-bottom:2px;}
+.cc-stat-v{font-size:13px;font-weight:700;font-family:var(--fm);}
+.cc-bar-bg{height:3px;background:var(--surface3);border-radius:2px;overflow:hidden;margin-bottom:12px;}
+.cc-bar-fill{height:100%;border-radius:2px;}
+.cc-actions{display:flex;gap:6px;}
+
+/* MODAL */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:200;align-items:center;justify-content:center;backdrop-filter:blur(4px);}
+.modal-overlay.open{display:flex;}
+.modal{background:var(--surface);border:1px solid var(--border2);border-radius:var(--r2);padding:28px;width:420px;max-width:92vw;box-shadow:0 20px 60px rgba(0,0,0,.6);animation:modalIn .2s ease;}
+@keyframes modalIn{from{opacity:0;transform:scale(.96) translateY(10px);}to{opacity:1;transform:scale(1) translateY(0);}}
+.modal-title{font-size:18px;font-weight:800;margin-bottom:6px;}
+.modal-sub{font-size:12px;color:var(--text3);margin-bottom:22px;}
+.modal-btns{display:flex;gap:8px;margin-top:22px;justify-content:flex-end;}
+
+/* TOAST */
+.toast{position:fixed;bottom:24px;right:24px;padding:12px 20px;border-radius:8px;font-size:13px;font-weight:600;z-index:9999;opacity:0;transform:translateY(10px);transition:all .3s;pointer-events:none;}
+.toast.show{opacity:1;transform:translateY(0);}
+
+/* HISTORY READ-ONLY NOTICE */
+.ro-notice{background:var(--amber-dim);border:1px solid rgba(255,181,71,.3);border-radius:8px;padding:10px 14px;font-size:12px;color:var(--amber);font-family:var(--fm);margin-bottom:16px;display:flex;align-items:center;gap:8px;}
+
+/* MILESTONE BADGE */
+.milestone{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:20px;font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;}
+.ms-gold{background:var(--gold-dim);color:var(--gold);}
+.ms-green{background:var(--green-dim);color:var(--green);}
+.ms-blue{background:var(--blue-dim);color:var(--blue);}
+.ms-amber{background:var(--amber-dim);color:var(--amber);}
+
+/* TARGET ACHIEVEMENT RING (mini) */
+.ring-wrap{display:flex;align-items:center;gap:14px;}
+.ring-info{flex:1;}
+
+/* EMPTY */
+.empty{text-align:center;padding:48px 24px;color:var(--text3);}
+.empty-icon{font-size:40px;margin-bottom:12px;}
+.empty-msg{font-size:14px;}
+
+/* SYNC DOT */
+.sync-dot{width:6px;height:6px;border-radius:50%;background:var(--text3);}
+.sync-dot.live{background:var(--green);box-shadow:0 0 6px var(--green);}
+.sync-dot.err{background:var(--red);}
+
+/* RESPONSIVE */
+@media(max-width:900px){.kpi-grid{grid-template-columns:repeat(3,1fr);}.setup-grid{grid-template-columns:repeat(2,1fr);}}
+@media(max-width:600px){.kpi-grid{grid-template-columns:repeat(2,1fr);}.setup-grid{grid-template-columns:1fr 1fr;}.stats-grid{grid-template-columns:1fr;}}
+</style>
+</head>
+<body>
+
+<!-- LOADING -->
+<div id="loadingScreen">
+  <div class="load-logo">SALES<span>.</span>TRACK</div>
+  <div class="load-bar"><div class="load-fill"></div></div>
+</div>
+
+<!-- LOGIN -->
+<div id="loginScreen" style="display:none;min-height:100vh;display:none;align-items:center;justify-content:center;padding:20px;">
+  <div class="login-wrap">
+    <div class="login-brand">
+      <div class="login-logo">SALES<span>.</span>TRACK</div>
+      <div class="login-tagline">Individual Performance Platform</div>
+    </div>
+    <div class="login-card">
+      <!-- Step 1: Role -->
+      <div class="login-step active" id="step1">
+        <div class="login-title">Good to see you 👋</div>
+        <div class="login-sub">How are you signing in today?</div>
+        <div class="role-grid">
+          <div class="role-btn" onclick="chooseRole('manager')">
+            <div class="role-icon">🔐</div>
+            <div class="role-label">Manager</div>
+            <div class="role-sub">Full access</div>
+          </div>
+          <div class="role-btn" onclick="chooseRole('consultant')">
+            <div class="role-icon">📈</div>
+            <div class="role-label">Consultant</div>
+            <div class="role-sub">My tracker</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 2a: Manager PIN -->
+      <div class="login-step" id="stepManager">
+        <div class="login-title">Manager Login</div>
+        <div class="login-sub">Enter your manager PIN to continue</div>
+        <div class="field">
+          <div class="field-lbl">Manager PIN</div>
+          <input type="password" id="mgrPinInput" placeholder="••••••" maxlength="6" style="font-size:22px;letter-spacing:.3em;text-align:center;" onkeydown="if(event.key==='Enter')tryManagerLogin()">
+        </div>
+        <div class="login-err" id="mgrErr"></div>
+        <button class="btn btn-p btn-w" onclick="tryManagerLogin()">Enter Dashboard</button>
+        <div style="margin-top:12px;text-align:center;font-size:11px;color:var(--text3)">
+          First time? <span style="color:var(--green);cursor:pointer" onclick="showSetupMgr()">Set manager PIN</span>
+        </div>
+        <button class="btn btn-s" onclick="backToStep1()" style="margin-top:10px;width:100%">← Back</button>
+      </div>
+
+      <!-- Step 2b: Consultant select -->
+      <div class="login-step" id="stepConsultant">
+        <div class="login-title">Consultant Login</div>
+        <div class="login-sub">Select your name and enter your PIN</div>
+        <div class="field">
+          <div class="field-lbl">Your Name</div>
+          <select id="consultantSel" onchange="document.getElementById('conPinInput').value=''">
+            <option value="">— Select —</option>
+          </select>
+        </div>
+        <div class="field">
+          <div class="field-lbl">Your PIN</div>
+          <input type="password" id="conPinInput" placeholder="••••" maxlength="6" style="font-size:22px;letter-spacing:.3em;text-align:center;" onkeydown="if(event.key==='Enter')tryConsultantLogin()">
+        </div>
+        <div class="login-err" id="conErr"></div>
+        <button class="btn btn-p btn-w" onclick="tryConsultantLogin()">Enter My Tracker</button>
+        <button class="btn btn-s" onclick="backToStep1()" style="margin-top:10px;width:100%">← Back</button>
+      </div>
+
+      <!-- Step: Setup Manager PIN -->
+      <div class="login-step" id="stepSetupMgr">
+        <div class="login-title">Set Manager PIN</div>
+        <div class="login-sub">Choose a secure PIN — you'll use this to manage consultants</div>
+        <div class="field">
+          <div class="field-lbl">New PIN (4–6 digits)</div>
+          <input type="password" id="newMgrPin" placeholder="••••••" maxlength="6" style="font-size:22px;letter-spacing:.3em;text-align:center;">
+        </div>
+        <div class="field">
+          <div class="field-lbl">Confirm PIN</div>
+          <input type="password" id="confirmMgrPin" placeholder="••••••" maxlength="6" style="font-size:22px;letter-spacing:.3em;text-align:center;" onkeydown="if(event.key==='Enter')saveManagerPin()">
+        </div>
+        <div class="login-err" id="setupErr"></div>
+        <button class="btn btn-p btn-w" onclick="saveManagerPin()">Save & Enter</button>
+        <button class="btn btn-s" onclick="showStep('stepManager')" style="margin-top:10px;width:100%">← Back</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <nav>
+    <div class="nav-brand">SALES<span>.</span>TRACK</div>
+    <div class="nav-center" id="navTabs"></div>
+    <div class="nav-right">
+      <div style="display:flex;align-items:center;gap:5px;">
+        <div class="sync-dot" id="syncDot"></div>
+        <span style="font-size:10px;color:var(--text3);font-family:var(--fm)" id="syncLabel">–</span>
+      </div>
+      <div class="month-badge" id="navMonthBadge"></div>
+      <div class="nav-user" onclick="logout()">
+        <div class="nav-av" id="navAv"></div>
+        <div>
+          <div class="nav-name" id="navName"></div>
+          <div class="nav-role" id="navRole"></div>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- CONSULTANT: MY TRACKER -->
+  <div class="page" id="page-tracker">
+    <div class="page-head">
+      <div>
+        <div class="page-title" id="trackerTitle">My Tracker</div>
+        <div class="page-sub" id="trackerSub"></div>
+      </div>
+      <div class="page-actions">
+        <div class="month-selector" id="monthSelector"></div>
+        <button class="btn btn-p" onclick="openNewMonthModal()" id="newMonthBtn">+ New Month</button>
+      </div>
+    </div>
+    <div id="roNotice"></div>
+    <div id="setupPrompt"></div>
+    <div class="kpi-grid" id="kpiRow"></div>
+    <div class="bands-wrap" id="bandsSection"></div>
+    <div class="stats-grid" id="statsGrid"></div>
+    <div class="tbl-wrap" id="dailyTableWrap"></div>
+  </div>
+
+  <!-- MANAGER: TEAM OVERVIEW -->
+  <div class="page" id="page-team">
+    <div class="page-head">
+      <div>
+        <div class="page-title">Team Overview</div>
+        <div class="page-sub" id="teamSub"></div>
+      </div>
+      <div class="page-actions">
+        <select id="teamMonthSel" onchange="renderTeamOverview()" style="width:160px;padding:8px 12px;font-size:12px;"></select>
+      </div>
+    </div>
+    <div class="kpi-grid" id="teamKpiRow" style="grid-template-columns:repeat(4,1fr)"></div>
+    <div class="mgr-grid" id="teamGrid"></div>
+  </div>
+
+  <!-- MANAGER: MANAGE CONSULTANTS -->
+  <div class="page" id="page-manage">
+    <div class="page-head">
+      <div>
+        <div class="page-title">Manage Consultants</div>
+        <div class="page-sub">Add, edit and configure team members</div>
+      </div>
+      <div class="page-actions">
+        <button class="btn btn-p" onclick="openAddConsultantModal()">+ Add Consultant</button>
+      </div>
+    </div>
+    <div id="consultantList"></div>
+    <div class="setup-card" style="margin-top:20px">
+      <div class="setup-title">🔐 Manager PIN</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="field">
+          <div class="field-lbl">New PIN</div>
+          <input type="password" id="changePinInput" placeholder="••••••" maxlength="6">
+        </div>
+        <div class="field">
+          <div class="field-lbl">Confirm PIN</div>
+          <input type="password" id="changePinConfirm" placeholder="••••••" maxlength="6">
+        </div>
+      </div>
+      <button class="btn btn-s" onclick="changeManagerPin()" style="margin-top:4px">Update PIN</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODALS -->
+<div class="modal-overlay" id="addConsultantModal">
+  <div class="modal">
+    <div class="modal-title" id="consultantModalTitle">Add Consultant</div>
+    <div class="modal-sub">Set their login credentials and display name</div>
+    <div class="field"><div class="field-lbl">Full Name</div><input type="text" id="cName" placeholder="e.g. Sarah Johnson"></div>
+    <div class="field"><div class="field-lbl">Username (login)</div><input type="text" id="cUsername" placeholder="e.g. sjohnson" style="font-family:var(--fm)"></div>
+    <div class="field"><div class="field-lbl">PIN (4–6 digits)</div><input type="password" id="cPin" placeholder="••••••" maxlength="6" style="font-size:18px;letter-spacing:.2em;text-align:center;"></div>
+    <input type="hidden" id="cEditId">
+    <div class="modal-btns">
+      <button class="btn btn-s" onclick="closeModal('addConsultantModal')">Cancel</button>
+      <button class="btn btn-d btn-sm" id="cDeleteBtn" style="display:none" onclick="deleteConsultant()">Remove</button>
+      <button class="btn btn-p" onclick="saveConsultant()">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="newMonthModal">
+  <div class="modal">
+    <div class="modal-title">Start New Month</div>
+    <div class="modal-sub">Select the month you want to set up. Previous months remain saved and viewable.</div>
+    <div class="field"><div class="field-lbl">Month</div>
+      <input type="month" id="newMonthInput" style="font-size:16px;font-weight:700;">
+    </div>
+    <div class="field"><div class="field-lbl">Monthly Revenue Target (£)</div>
+      <input type="number" id="newMonthTarget" placeholder="e.g. 24000" min="0">
+    </div>
+    <div class="field"><div class="field-lbl">Targeted Working Days</div>
+      <input type="number" id="newMonthDays" placeholder="e.g. 20" min="1" max="31">
+    </div>
+    <div class="modal-btns">
+      <button class="btn btn-s" onclick="closeModal('newMonthModal')">Cancel</button>
+      <button class="btn btn-p" onclick="createNewMonth()">Create Month</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="setupMonthModal">
+  <div class="modal">
+    <div class="modal-title">Setup This Month</div>
+    <div class="modal-sub">Configure your targets to activate your tracker</div>
+    <div class="field"><div class="field-lbl">Monthly Revenue Target (£)</div>
+      <input type="number" id="setupTarget" placeholder="e.g. 24000" min="0">
+    </div>
+    <div class="field"><div class="field-lbl">Targeted Working Days</div>
+      <input type="number" id="setupDays" placeholder="e.g. 20" min="1" max="31">
+    </div>
+    <div class="modal-btns">
+      <button class="btn btn-s" onclick="closeModal('setupMonthModal')">Later</button>
+      <button class="btn btn-p" onclick="saveMonthSetup()">Save & Start Tracking</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════
+// FIREBASE CONFIG — Replace with your project config
+// ═══════════════════════════════════════════════════════════════════
+const firebaseConfig = {
+  apiKey: "AIzaSyC5Gi3qbBMrMRTpbFqEQUZewqh1Yqxxg8A",
+  authDomain: "monthly-tracker-d4155.firebaseapp.com",
+  databaseURL: "https://monthly-tracker-d4155-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "monthly-tracker-d4155",
+  storageBucket: "monthly-tracker-d4155.firebasestorage.app",
+  messagingSenderId: "716195651661",
+  appId: "1:716195651661:web:d21fcce605a56e8a7dbc04"
+};
+firebase.initializeApp(FB_CONFIG);
+const db  = firebase.database();
+const ref = db.ref('salesTrack');
+
+// ═══════════════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════════════
+let SESSION = { role:null, consultantId:null, name:null };
+let DATA    = { consultants:{}, data:{}, config:{managerPin:'1234'} };
+let ACTIVE_MK  = todayKey();     // current month key "2026-04"
+let VIEW_MK    = ACTIVE_MK;      // month being viewed (may differ from active)
+let MGR_VIEW_CID = null;         // manager viewing a specific consultant
+let _saveTimer = null;
+
+function todayKey(){
+  const d=new Date();
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+}
+function monthLabel(mk){
+  const [y,m]=mk.split('-');
+  return new Date(y,m-1,1).toLocaleDateString('en-GB',{month:'long',year:'numeric'});
+}
+function fmtDate(d){
+  return new Date(d+'T12:00:00').toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'});
+}
+function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,5); }
+function initials(n){ return n.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2); }
+function isWeekend(ds){ const d=new Date(ds+'T12:00:00'); return d.getDay()===0||d.getDay()===6; }
+
+const UK_BH = new Set([
+  '2026-01-01','2026-04-03','2026-04-06','2026-05-04','2026-05-25',
+  '2026-08-31','2026-12-25','2026-12-28','2025-01-01','2025-04-18',
+  '2025-04-21','2025-05-05','2025-05-26','2025-08-25','2025-12-25','2025-12-26'
+]);
+
+function daysInMonth(mk){
+  const [y,m]=mk.split('-').map(Number);
+  return new Date(y,m,0).getDate();
+}
+function workingDaysInMonth(mk){
+  const [y,m]=mk.split('-').map(Number);
+  let count=0;
+  for(let d=1;d<=new Date(y,m,0).getDate();d++){
+    const ds=mk+'-'+String(d).padStart(2,'0');
+    const dow=new Date(ds+'T12:00:00').getDay();
+    if(dow!==0&&dow!==6&&!UK_BH.has(ds)) count++;
+  }
+  return count;
+}
+function workingDaysElapsed(mk){
+  const today=new Date().toISOString().slice(0,10);
+  const [y,m]=mk.split('-').map(Number);
+  let count=0;
+  for(let d=1;d<=new Date(y,m,0).getDate();d++){
+    const ds=mk+'-'+String(d).padStart(2,'0');
+    if(ds>today) break;
+    const dow=new Date(ds+'T12:00:00').getDay();
+    if(dow!==0&&dow!==6&&!UK_BH.has(ds)) count++;
+  }
+  return count;
+}
+
+// Consultant avatar colours
+const COLORS=['#00d68f','#4d9fff','#ff4d6d','#ffb547','#a78bfa','#f5c842','#00c8ff','#ff6b35'];
+function avColor(id){ const h=id.split('').reduce((a,c)=>a+c.charCodeAt(0),0); return COLORS[h%COLORS.length]; }
+
+// ═══════════════════════════════════════════════════════════════════
+// FIREBASE SYNC
+// ═══════════════════════════════════════════════════════════════════
+function setSyncStatus(s){
+  const dot=document.getElementById('syncDot');
+  const lbl=document.getElementById('syncLabel');
+  const map={connecting:{cls:'',t:'connecting…'},live:{cls:'live',t:'live'},err:{cls:'err',t:'error'}};
+  const v=map[s]||map.connecting;
+  if(dot){ dot.className='sync-dot '+v.cls; }
+  if(lbl) lbl.textContent=v.t;
+}
+function saveConsultantData(cid, mk, cb){
+  const d = (DATA.data[cid]||{})[mk]||{};
+  ref.child('data/'+cid+'/'+mk).set(d, err=>{ if(cb) cb(err); });
+}
+function saveConfig(){
+  ref.child('config').set(DATA.config);
+}
+function saveConsultants(){
+  ref.child('consultants').set(DATA.consultants||{});
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// LOGIN FLOW
+// ═══════════════════════════════════════════════════════════════════
+function showStep(id){
+  document.querySelectorAll('.login-step').forEach(s=>s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+function chooseRole(r){
+  if(r==='manager') showStep('stepManager');
+  else { populateConsultantSel(); showStep('stepConsultant'); }
+}
+function backToStep1(){ showStep('step1'); }
+function showSetupMgr(){ showStep('stepSetupMgr'); }
+
+function populateConsultantSel(){
+  const sel=document.getElementById('consultantSel');
+  const cons=Object.entries(DATA.consultants||{}).filter(([,c])=>c.active!==false).sort((a,b)=>a[1].name.localeCompare(b[1].name));
+  sel.innerHTML='<option value="">— Select your name —</option>'+cons.map(([id,c])=>`<option value="${id}">${c.name}</option>`).join('');
+}
+
+function tryManagerLogin(){
+  const pin=document.getElementById('mgrPinInput').value;
+  const err=document.getElementById('mgrErr');
+  if(pin===(DATA.config.managerPin||'1234')){
+    err.textContent='';
+    SESSION={role:'manager',consultantId:null,name:'Manager'};
+    enterApp();
+  } else {
+    err.textContent='Incorrect PIN. Please try again.';
+    document.getElementById('mgrPinInput').value='';
+  }
+}
+
+function tryConsultantLogin(){
+  const cid=document.getElementById('consultantSel').value;
+  const pin=document.getElementById('conPinInput').value;
+  const err=document.getElementById('conErr');
+  if(!cid){ err.textContent='Please select your name.'; return; }
+  const c=DATA.consultants[cid];
+  if(!c){ err.textContent='Consultant not found.'; return; }
+  if(String(c.pin)===String(pin)){
+    err.textContent='';
+    SESSION={role:'consultant',consultantId:cid,name:c.name};
+    enterApp();
+  } else {
+    err.textContent='Incorrect PIN. Please try again.';
+    document.getElementById('conPinInput').value='';
+  }
+}
+
+function saveManagerPin(){
+  const p=document.getElementById('newMgrPin').value;
+  const c=document.getElementById('confirmMgrPin').value;
+  const err=document.getElementById('setupErr');
+  if(p.length<4){ err.textContent='PIN must be at least 4 digits.'; return; }
+  if(p!==c){ err.textContent='PINs do not match.'; return; }
+  DATA.config.managerPin=p;
+  saveConfig();
+  SESSION={role:'manager',consultantId:null,name:'Manager'};
+  enterApp();
+}
+
+function logout(){
+  SESSION={role:null,consultantId:null,name:null};
+  VIEW_MK=ACTIVE_MK=todayKey();
+  document.getElementById('mgrPinInput').value='';
+  document.getElementById('conPinInput').value='';
+  showStep('step1');
+  document.getElementById('app').style.display='none';
+  document.getElementById('loginScreen').style.display='flex';
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// APP ENTRY
+// ═══════════════════════════════════════════════════════════════════
+function enterApp(){
+  document.getElementById('loginScreen').style.display='none';
+  document.getElementById('app').style.display='block';
+
+  // Nav user
+  document.getElementById('navName').textContent=SESSION.name;
+  document.getElementById('navRole').textContent=SESSION.role==='manager'?'Manager':'Consultant';
+  const av=document.getElementById('navAv');
+  av.textContent=initials(SESSION.name);
+  if(SESSION.consultantId) av.style.background=avColor(SESSION.consultantId);
+
+  // Nav tabs
+  const tabs=document.getElementById('navTabs');
+  if(SESSION.role==='manager'){
+    tabs.innerHTML=`
+      <button class="nav-tab active" onclick="showPage('team')">📊 Team Overview</button>
+      <button class="nav-tab" onclick="showPage('manage')">⚙️ Manage Consultants</button>`;
+    showPage('team');
+  } else {
+    tabs.innerHTML=`<button class="nav-tab active" onclick="showPage('tracker')">📈 My Tracker</button>`;
+    VIEW_MK=ACTIVE_MK=todayKey();
+    // Auto-create month entry if needed
+    ensureMonthExists(SESSION.consultantId, ACTIVE_MK);
+    showPage('tracker');
+  }
+}
+
+function showPage(p){
+  document.querySelectorAll('.page').forEach(el=>el.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(b=>b.classList.remove('active'));
+  document.getElementById('page-'+p).classList.add('active');
+  document.querySelector(`.nav-tab[onclick*="'${p}'"]`)?.classList.add('active');
+  if(p==='tracker') renderTracker();
+  else if(p==='team') renderTeamOverview();
+  else if(p==='manage') renderManage();
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// MONTH MANAGEMENT
+// ═══════════════════════════════════════════════════════════════════
+function ensureMonthExists(cid, mk){
+  if(!DATA.data[cid]) DATA.data[cid]={};
+  if(!DATA.data[cid][mk]){
+    DATA.data[cid][mk]={ target:0, targetedDays:0, entries:{} };
+  }
+}
+
+function getConsultantMonths(cid){
+  const months=Object.keys((DATA.data[cid])||{}).sort().reverse();
+  if(!months.includes(ACTIVE_MK)) months.unshift(ACTIVE_MK);
+  return [...new Set(months)];
+}
+
+function openNewMonthModal(){
+  const inp=document.getElementById('newMonthInput');
+  inp.value=ACTIVE_MK;
+  inp.min='2026-01';
+  document.getElementById('newMonthTarget').value='';
+  document.getElementById('newMonthDays').value='';
+  document.getElementById('newMonthModal').classList.add('open');
+}
+
+function createNewMonth(){
+  const mk=document.getElementById('newMonthInput').value;
+  const target=parseFloat(document.getElementById('newMonthTarget').value)||0;
+  const days=parseInt(document.getElementById('newMonthDays').value)||0;
+  if(!mk){ showToast('Select a month','err'); return; }
+  const cid=SESSION.consultantId;
+  ensureMonthExists(cid,mk);
+  DATA.data[cid][mk].target=target;
+  DATA.data[cid][mk].targetedDays=days;
+  VIEW_MK=mk;
+  saveConsultantData(cid,mk,()=>showToast('Month created — start tracking!'));
+  closeModal('newMonthModal');
+  renderTracker();
+}
+
+function openSetupModal(){
+  const d=(DATA.data[SESSION.consultantId]||{})[VIEW_MK]||{};
+  document.getElementById('setupTarget').value=d.target||'';
+  document.getElementById('setupDays').value=d.targetedDays||'';
+  document.getElementById('setupMonthModal').classList.add('open');
+}
+
+function saveMonthSetup(){
+  const target=parseFloat(document.getElementById('setupTarget').value)||0;
+  const days=parseInt(document.getElementById('setupDays').value)||0;
+  const cid=SESSION.consultantId;
+  ensureMonthExists(cid,VIEW_MK);
+  DATA.data[cid][VIEW_MK].target=target;
+  DATA.data[cid][VIEW_MK].targetedDays=days;
+  saveConsultantData(cid,VIEW_MK,()=>showToast('Targets saved'));
+  closeModal('setupMonthModal');
+  renderTracker();
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// CALCULATIONS
+// ═══════════════════════════════════════════════════════════════════
+function calcStats(cid, mk){
+  const d=(DATA.data[cid]||{})[mk]||{target:0,targetedDays:0,entries:{}};
+  const entries=Object.values(d.entries||{});
+  const target=d.target||0;
+  const targetedDays=d.targetedDays||0;
+  const rpd=targetedDays>0?target/targetedDays:0;
+
+  const currentRisk=entries.reduce((s,e)=>s+(e.risk||0),0);
+  const needsMet=entries.reduce((s,e)=>s+(e.nm||0),0);
+  const daysWorked=entries.filter(e=>(e.risk||0)>0).length;
+  const rpdActual=daysWorked>0?currentRisk/daysWorked:0;
+
+  const elapsed=workingDaysElapsed(mk);
+  const totalWD=workingDaysInMonth(mk);
+  const remaining=Math.max(0,totalWD-elapsed);
+
+  const copCheckpoint=(elapsed+1)*rpd;
+  const copRiskNeeded=copCheckpoint-currentRisk;
+  const copNmNeeded=((elapsed+1)*1.75)-needsMet;
+
+  const rpdNeeded=remaining>0?(target-currentRisk)/remaining:0;
+
+  const pct=target>0?Math.round(currentRisk/target*100):0;
+  const bands=[25,50,75,100].map(b=>({pct:b,val:Math.round(target*b/100),achieved:currentRisk>=(target*b/100)}));
+
+  return {target,targetedDays,rpd,currentRisk,needsMet,daysWorked,rpdActual,
+          elapsed,totalWD,remaining,copRiskNeeded,copNmNeeded,rpdNeeded,pct,bands,
+          forTarget:Math.max(0,target-currentRisk),entries:d.entries||{},
+          raw:d};
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// RENDER TRACKER
+// ═══════════════════════════════════════════════════════════════════
+function renderTracker(){
+  const cid=SESSION.consultantId;
+  const isReadOnly=VIEW_MK!==ACTIVE_MK;
+  const c=DATA.consultants[cid]||{name:SESSION.name};
+  const stats=calcStats(cid,VIEW_MK);
+
+  document.getElementById('trackerTitle').textContent=c.name+"'s Tracker";
+  document.getElementById('trackerSub').textContent=monthLabel(VIEW_MK)+' · '+stats.pct+'% to target';
+  document.getElementById('navMonthBadge').textContent=monthLabel(VIEW_MK);
+  document.getElementById('newMonthBtn').style.display=isReadOnly?'none':'inline-flex';
+
+  // Month selector tabs
+  const months=getConsultantMonths(cid);
+  document.getElementById('monthSelector').innerHTML=months.map(mk=>`
+    <button class="month-btn ${mk===VIEW_MK?'active':''}" onclick="switchMonth('${mk}')">${monthLabel(mk)}</button>`).join('');
+
+  // Read-only notice
+  document.getElementById('roNotice').innerHTML=isReadOnly?
+    `<div class="ro-notice">👁 Viewing <b>${monthLabel(VIEW_MK)}</b> — this month is locked and read-only</div>`:'';
+
+  // Setup prompt
+  const needsSetup=!stats.target&&!isReadOnly;
+  document.getElementById('setupPrompt').innerHTML=needsSetup?
+    `<div style="background:var(--blue-dim);border:1px solid rgba(77,159,255,.3);border-radius:8px;padding:14px 18px;margin-bottom:18px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+      <div><div style="font-weight:700;font-size:13px">⚙️ Set up this month's targets</div><div style="font-size:11px;color:var(--text3);margin-top:2px">Add your monthly target and working days to activate tracking</div></div>
+      <button class="btn btn-p" onclick="openSetupModal()">Setup Now</button>
+    </div>`:'';
+
+  // KPI row
+  const cr=stats.copRiskNeeded;
+  const cn=stats.copNmNeeded;
+  document.getElementById('kpiRow').innerHTML=`
+    <div class="kpi ${stats.pct>=75?'g':stats.pct>=50?'a':'r'}">
+      <div class="kpi-lbl">Current Risk</div>
+      <div class="kpi-val ${stats.pct>=75?'g':stats.pct>=50?'a':'r'}">£${Math.round(stats.currentRisk).toLocaleString()}</div>
+      <div class="kpi-sub">${stats.pct}% of target</div>
+    </div>
+    <div class="kpi b">
+      <div class="kpi-lbl">Monthly Target</div>
+      <div class="kpi-val b">£${Math.round(stats.target).toLocaleString()}</div>
+      <div class="kpi-sub">${stats.targetedDays} targeted days</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-lbl">Needs Met</div>
+      <div class="kpi-val">${stats.needsMet}</div>
+      <div class="kpi-sub">target: ${(stats.targetedDays*1.75).toFixed(1)}</div>
+    </div>
+    <div class="kpi ${cr<=0?'g':cr<stats.rpd?'a':'r'}">
+      <div class="kpi-lbl">COP Risk</div>
+      <div class="kpi-val ${cr<=0?'g':cr<stats.rpd?'a':'r'}">${cr<=0?'+£'+Math.round(Math.abs(cr)).toLocaleString():'£'+Math.round(cr).toLocaleString()}</div>
+      <div class="kpi-sub">${cr<=0?'ahead of checkpoint':'needed by checkpoint'}</div>
+    </div>
+    <div class="kpi ${cn<=0?'g':cn<1.75?'a':'r'}">
+      <div class="kpi-lbl">COP NM</div>
+      <div class="kpi-val ${cn<=0?'g':cn<1.75?'a':'r'}">${cn<=0?'+'+Math.abs(cn).toFixed(1):cn.toFixed(1)}</div>
+      <div class="kpi-sub">${cn<=0?'ahead of checkpoint':'needed by checkpoint'}</div>
+    </div>
+    <div class="kpi ${stats.remaining>0?'gold':'g'}">
+      <div class="kpi-lbl">Days Left</div>
+      <div class="kpi-val gold">${stats.remaining}</div>
+      <div class="kpi-sub">${stats.elapsed} of ${stats.totalWD} worked</div>
+    </div>`;
+
+  // Bands
+  const bpct=Math.min(100,stats.pct);
+  const bandColor=stats.pct>=100?'var(--green)':stats.pct>=75?'var(--blue)':stats.pct>=50?'var(--amber)':'var(--red)';
+  document.getElementById('bandsSection').innerHTML=`
+    <div class="bands-title">Target Achievement Bands</div>
+    <div class="bands-track">
+      <div class="bands-fill" style="width:${bpct}%;background:linear-gradient(90deg,var(--red),var(--amber) 50%,var(--green));"></div>
+      ${[25,50,75].map(p=>`<div style="position:absolute;left:${p}%;top:0;bottom:0;width:1px;background:rgba(255,255,255,.2)"></div>`).join('')}
+    </div>
+    <div class="band-markers" style="padding:0 0 0 0">
+      ${stats.bands.map(b=>`
+        <div style="display:flex;flex-direction:column;align-items:center;gap:2px;width:25%">
+          <div style="font-size:10px;font-weight:700;font-family:var(--fm);color:${b.achieved?'var(--green)':'var(--text3)'}">${b.pct}%</div>
+          <div style="font-size:9px;color:var(--text3);font-family:var(--fm)">£${b.val.toLocaleString()}</div>
+          ${b.achieved?'<span class="milestone ms-green" style="font-size:9px">✓ Hit</span>':''}
+        </div>`).join('')}
+    </div>
+    <div style="margin-top:10px;font-size:12px;color:var(--text2)">
+      <span style="font-weight:700;color:${bandColor}">${stats.pct}% achieved</span>
+      ${stats.pct>=100?'<span class="milestone ms-gold" style="margin-left:8px">🏆 Target Hit!</span>':
+        stats.pct>=75?'<span class="milestone ms-green" style="margin-left:8px">⭐ 75%+ Band</span>':
+        stats.pct>=50?'<span class="milestone ms-blue" style="margin-left:8px">💪 50%+ Band</span>':''}
+    </div>`;
+
+  // Stats panels
+  const rpd=stats.rpd>0?'£'+stats.rpd.toFixed(2):'—';
+  const rpdA=stats.rpdActual>0?'£'+stats.rpdActual.toFixed(2):'—';
+  const rpdN=stats.rpdNeeded>0?'£'+stats.rpdNeeded.toFixed(2):'—';
+  document.getElementById('statsGrid').innerHTML=`
+    <div class="setup-card" style="margin-bottom:0">
+      <div class="setup-title">📊 Month Summary</div>
+      <div class="stat-row"><span class="stat-lbl">Monthly Target</span><span class="stat-val">£${Math.round(stats.target).toLocaleString()}</span></div>
+      <div class="stat-row"><span class="stat-lbl">Targeted Days</span><span class="stat-val">${stats.targetedDays}</span></div>
+      <div class="stat-row"><span class="stat-lbl">Days Worked</span><span class="stat-val">${stats.daysWorked}</span></div>
+      <div class="stat-row"><span class="stat-lbl">Working Days Elapsed</span><span class="stat-val">${stats.elapsed}</span></div>
+      <div class="stat-row"><span class="stat-lbl">Remaining Working Days</span><span class="stat-val ${stats.remaining<=3?'r':''}">${stats.remaining}</span></div>
+      <div class="stat-row"><span class="stat-lbl">For Target Remaining</span><span class="stat-val ${stats.forTarget<=0?'g':'r'}">£${Math.round(stats.forTarget).toLocaleString()}</span></div>
+    </div>
+    <div class="setup-card" style="margin-bottom:0">
+      <div class="setup-title">⚡ Performance Rates</div>
+      <div class="stat-row"><span class="stat-lbl">Risk Per Day (target)</span><span class="stat-val">${rpd}</span></div>
+      <div class="stat-row"><span class="stat-lbl">Risk Per Day (actual)</span><span class="stat-val ${stats.rpdActual>=(stats.rpd*0.9)?'g':'r'}">${rpdA}</span></div>
+      <div class="stat-row"><span class="stat-lbl">RPD Needed (to hit target)</span><span class="stat-val a">${rpdN}</span></div>
+      <div class="stat-row"><span class="stat-lbl">COP Risk Needed</span><span class="stat-val ${stats.copRiskNeeded<=0?'g':'r'}">£${Math.round(stats.copRiskNeeded).toLocaleString()}</span></div>
+      <div class="stat-row"><span class="stat-lbl">COP NM Needed</span><span class="stat-val ${stats.copNmNeeded<=0?'g':'r'}">${stats.copNmNeeded.toFixed(1)}</span></div>
+      <div class="stat-row"><span class="stat-lbl">Needs Met Total</span><span class="stat-val">${stats.needsMet}</span></div>
+    </div>`;
+
+  // Daily table
+  renderDailyTable(cid, VIEW_MK, isReadOnly, stats);
+}
+
+function switchMonth(mk){
+  VIEW_MK=mk;
+  ensureMonthExists(SESSION.consultantId,mk);
+  renderTracker();
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// DAILY TABLE
+// ═══════════════════════════════════════════════════════════════════
+function renderDailyTable(cid, mk, readOnly, stats){
+  const [y,m]=mk.split('-').map(Number);
+  const numDays=new Date(y,m,0).getDate();
+  const today=new Date().toISOString().slice(0,10);
+  const entries=stats.entries;
+
+  let cumRisk=0,cumNm=0;
+  let rows='';
+  for(let d=1;d<=numDays;d++){
+    const ds=mk+'-'+String(d).padStart(2,'0');
+    const dow=new Date(ds+'T12:00:00').getDay();
+    const wknd=dow===0||dow===6;
+    const bh=UK_BH.has(ds);
+    const entry=Object.values(entries).find(e=>e.date===ds)||{date:ds,risk:0,nm:0,swift:'',plps:''};
+    const eId=Object.keys(entries).find(k=>entries[k].date===ds)||null;
+    const risk=entry.risk||0;
+    const nm=entry.nm||0;
+    if(!wknd&&!bh){ cumRisk+=risk; cumNm+=nm; }
+    const isToday=ds===today;
+    const hasData=risk>0||nm>0;
+    const rowCls=[wknd?'weekend':'',isToday?'today':'',hasData&&!wknd?'has-data':''].join(' ');
+    const label=wknd?`<span style="opacity:.4">${fmtDate(ds)}</span>`:bh?`${fmtDate(ds)} <span style="font-size:9px;color:var(--amber)">[BH]</span>`:fmtDate(ds);
+    const bgStyle=wknd||bh?'background:var(--surface2);':isToday?'background:rgba(0,214,143,.04);':'';
+
+    if(readOnly||wknd||bh){
+      rows+=`<tr class="${rowCls}" style="${bgStyle}">
+        <td class="day-lbl${wknd?' wknd':''}">${label}</td>
+        <td>${risk>0?'£'+risk.toLocaleString():''}</td>
+        <td>${nm>0?nm:''}</td>
+        <td style="color:var(--text3);font-size:11px">${entry.swift||''}</td>
+        <td>${entry.plps||''}</td>
+        <td class="running ${cumRisk>0?'pos':''}">${!wknd&&!bh&&cumRisk>0?'£'+Math.round(cumRisk).toLocaleString():''}</td>
+        <td class="running ${cumNm>0?'pos':''}">${!wknd&&!bh&&cumNm>0?cumNm:''}</td>
+      </tr>`;
+    } else {
+      rows+=`<tr class="${rowCls}" style="${bgStyle}" id="row-${ds}">
+        <td class="day-lbl">${label}</td>
+        <td><input type="number" value="${risk||''}" placeholder="0" min="0" step="0.01"
+          onchange="updateEntry('${cid}','${mk}','${ds}','risk',this.value,'${eId||''}')"
+          style="width:90px;${risk>0?'color:var(--green);font-weight:600':''}"></td>
+        <td><input type="number" value="${nm||''}" placeholder="0" min="0"
+          onchange="updateEntry('${cid}','${mk}','${ds}','nm',this.value,'${eId||''}')"></td>
+        <td><input type="text" value="${entry.swift||''}" placeholder="REF…"
+          onchange="updateEntry('${cid}','${mk}','${ds}','swift',this.value,'${eId||''}')"></td>
+        <td><input type="text" value="${entry.plps||''}" placeholder="—"
+          onchange="updateEntry('${cid}','${mk}','${ds}','plps',this.value,'${eId||''}')"></td>
+        <td class="running ${cumRisk>0?'pos':''}">${cumRisk>0?'£'+Math.round(cumRisk).toLocaleString():''}</td>
+        <td class="running ${cumNm>0?'pos':''}">${cumNm>0?cumNm:''}</td>
+      </tr>`;
+    }
+  }
+
+  document.getElementById('dailyTableWrap').innerHTML=`
+    <div class="tbl-head-bar">
+      <div>
+        <div class="tbl-head-title">Daily Log — ${monthLabel(mk)}</div>
+        <div class="tbl-head-sub">Click any cell to edit · data saves automatically</div>
+      </div>
+      <span class="save-indicator" id="saveInd">✓ Saved</span>
+    </div>
+    <div style="overflow-x:auto">
+      <table class="daily">
+        <thead><tr>
+          <th>Date</th>
+          <th>Risk (£)</th>
+          <th>Needs Met</th>
+          <th>SWIFT Refs</th>
+          <th>PLPs</th>
+          <th>Running Risk</th>
+          <th>Running NM</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+        <tfoot><tr>
+          <td>MONTH TOTAL</td>
+          <td>£${Math.round(stats.currentRisk).toLocaleString()}</td>
+          <td>${stats.needsMet}</td>
+          <td colspan="2"></td>
+          <td style="color:${stats.pct>=100?'var(--green)':stats.pct>=75?'var(--blue)':'var(--amber)'}">£${Math.round(stats.currentRisk).toLocaleString()}</td>
+          <td>${stats.needsMet}</td>
+        </tr></tfoot>
+      </table>
+    </div>`;
+}
+
+function updateEntry(cid,mk,ds,field,val,existingId){
+  ensureMonthExists(cid,mk);
+  const entries=DATA.data[cid][mk].entries||{};
+  let eId=existingId||Object.keys(entries).find(k=>entries[k].date===ds);
+  if(!eId){ eId=uid(); }
+  if(!entries[eId]) entries[eId]={date:ds,risk:0,nm:0,swift:'',plps:''};
+
+  if(field==='risk'||field==='nm') entries[eId][field]=parseFloat(val)||0;
+  else entries[eId][field]=val;
+
+  DATA.data[cid][mk].entries=entries;
+  deboundSave(cid,mk);
+}
+
+let _saveTimers={};
+function deboundSave(cid,mk){
+  const key=cid+'_'+mk;
+  clearTimeout(_saveTimers[key]);
+  _saveTimers[key]=setTimeout(()=>{
+    saveConsultantData(cid,mk,()=>{
+      const ind=document.getElementById('saveInd');
+      if(ind){ ind.style.display='inline'; setTimeout(()=>{ if(ind) ind.style.display='none'; },2000); }
+      renderTracker();
+    });
+  },800);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// MANAGER: TEAM OVERVIEW
+// ═══════════════════════════════════════════════════════════════════
+function renderTeamOverview(){
+  const sel=document.getElementById('teamMonthSel');
+  // Populate month select
+  const allMks=new Set([ACTIVE_MK]);
+  Object.values(DATA.data||{}).forEach(cd=>Object.keys(cd).forEach(mk=>allMks.add(mk)));
+  const sorted=[...allMks].sort().reverse();
+  if(sel.innerHTML==='') sel.innerHTML=sorted.map(mk=>`<option value="${mk}"${mk===ACTIVE_MK?' selected':''}>${monthLabel(mk)}</option>`).join('');
+  const mk=sel.value||ACTIVE_MK;
+
+  document.getElementById('teamSub').textContent=monthLabel(mk)+' · '+Object.keys(DATA.consultants||{}).length+' consultants';
+
+  const cons=Object.entries(DATA.consultants||{}).filter(([,c])=>c.active!==false);
+  let totalRisk=0,totalNM=0,onTrack=0,totalTarget=0;
+
+  const cards=cons.map(([id,c])=>{
+    const s=calcStats(id,mk);
+    totalRisk+=s.currentRisk; totalNM+=s.needsMet; totalTarget+=s.target;
+    if(s.copRiskNeeded<=0) onTrack++;
+    const pct=s.pct;
+    const col=pct>=100?'var(--green)':pct>=75?'var(--blue)':pct>=50?'var(--amber)':'var(--red)';
+    const barW=Math.min(100,pct);
+    return `<div class="consultant-card">
+      <div class="cc-top">
+        <div class="cc-av" style="background:${avColor(id)};color:#000">${initials(c.name)}</div>
+        <div>
+          <div class="cc-name">${c.name}</div>
+          <div class="cc-username">@${c.username||'–'}</div>
+        </div>
+        <div style="margin-left:auto;font-size:20px;font-weight:800;font-family:var(--fm);color:${col}">${pct}%</div>
+      </div>
+      <div class="cc-stats">
+        <div class="cc-stat"><div class="cc-stat-l">Risk MTD</div><div class="cc-stat-v" style="color:${col}">£${Math.round(s.currentRisk).toLocaleString()}</div></div>
+        <div class="cc-stat"><div class="cc-stat-l">Target</div><div class="cc-stat-v">£${Math.round(s.target).toLocaleString()}</div></div>
+        <div class="cc-stat"><div class="cc-stat-l">NM</div><div class="cc-stat-v">${s.needsMet}</div></div>
+        <div class="cc-stat"><div class="cc-stat-l">COP Risk</div><div class="cc-stat-v" style="color:${s.copRiskNeeded<=0?'var(--green)':'var(--red)'}">£${Math.round(s.copRiskNeeded).toLocaleString()}</div></div>
+        <div class="cc-stat"><div class="cc-stat-l">COP NM</div><div class="cc-stat-v" style="color:${s.copNmNeeded<=0?'var(--green)':'var(--red)'}">${s.copNmNeeded.toFixed(1)}</div></div>
+        <div class="cc-stat"><div class="cc-stat-l">Days Left</div><div class="cc-stat-v">${s.remaining}</div></div>
+      </div>
+      <div class="cc-bar-bg"><div class="cc-bar-fill" style="width:${barW}%;background:${col}"></div></div>
+      <div class="cc-actions">
+        <button class="btn btn-s" style="font-size:11px;padding:6px 12px" onclick="viewConsultantAsManager('${id}')">👁 View Tracker</button>
+        <button class="btn btn-s" style="font-size:11px;padding:6px 12px" onclick="openEditConsultant('${id}')">✏️ Edit</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  const teamPct=totalTarget>0?Math.round(totalRisk/totalTarget*100):0;
+  document.getElementById('teamKpiRow').innerHTML=`
+    <div class="kpi ${teamPct>=75?'g':teamPct>=50?'a':'r'}">
+      <div class="kpi-lbl">Team Risk MTD</div>
+      <div class="kpi-val ${teamPct>=75?'g':teamPct>=50?'a':'r'}">£${Math.round(totalRisk).toLocaleString()}</div>
+      <div class="kpi-sub">${teamPct}% of total target</div>
+    </div>
+    <div class="kpi b">
+      <div class="kpi-lbl">Total Target</div>
+      <div class="kpi-val b">£${Math.round(totalTarget).toLocaleString()}</div>
+      <div class="kpi-sub">${cons.length} consultants</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-lbl">Team Needs Met</div>
+      <div class="kpi-val">${totalNM}</div>
+      <div class="kpi-sub">total deals</div>
+    </div>
+    <div class="kpi ${onTrack>=cons.length/2?'g':'a'}">
+      <div class="kpi-lbl">On Track</div>
+      <div class="kpi-val ${onTrack>=cons.length/2?'g':'a'}">${onTrack} / ${cons.length}</div>
+      <div class="kpi-sub">ahead on COP</div>
+    </div>`;
+
+  document.getElementById('teamGrid').innerHTML=cards||'<div class="empty"><div class="empty-icon">👥</div><div class="empty-msg">No consultants yet.<br>Go to Manage Consultants to add your team.</div></div>';
+}
+
+function viewConsultantAsManager(cid){
+  // Switch to a read-only consultant view as manager
+  const c=DATA.consultants[cid];
+  SESSION.viewingCid=cid;
+  SESSION.viewingName=c.name;
+  ensureMonthExists(cid,ACTIVE_MK);
+  VIEW_MK=ACTIVE_MK;
+  // Temporarily set session to mimic consultant view
+  const origRole=SESSION.role;
+  const origCid=SESSION.consultantId;
+  const origName=SESSION.name;
+  SESSION.role='consultant';
+  SESSION.consultantId=cid;
+  SESSION.name=c.name;
+  SESSION.isManagerViewing=true;
+  // Add tracker tab
+  const tabs=document.getElementById('navTabs');
+  tabs.innerHTML=`
+    <button class="nav-tab" onclick="returnToManager()">← Back to Team</button>
+    <button class="nav-tab active" onclick="showPage('tracker')">📈 ${c.name}'s Tracker</button>`;
+  document.getElementById('navName').textContent='Manager';
+  document.getElementById('navRole').textContent='Viewing: '+c.name;
+  showPage('tracker');
+}
+
+function returnToManager(){
+  SESSION.role='manager';
+  SESSION.consultantId=null;
+  SESSION.name='Manager';
+  SESSION.isManagerViewing=false;
+  VIEW_MK=ACTIVE_MK;
+  document.getElementById('navName').textContent='Manager';
+  document.getElementById('navRole').textContent='Manager';
+  const tabs=document.getElementById('navTabs');
+  tabs.innerHTML=`
+    <button class="nav-tab active" onclick="showPage('team')">📊 Team Overview</button>
+    <button class="nav-tab" onclick="showPage('manage')">⚙️ Manage Consultants</button>`;
+  document.getElementById('navAv').textContent=initials('Manager');
+  document.getElementById('navAv').style.background='linear-gradient(135deg,var(--green),var(--blue))';
+  showPage('team');
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// MANAGER: MANAGE CONSULTANTS
+// ═══════════════════════════════════════════════════════════════════
+function renderManage(){
+  const cons=Object.entries(DATA.consultants||{}).sort((a,b)=>a[1].name.localeCompare(b[1].name));
+  document.getElementById('consultantList').innerHTML=cons.length?`
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r);overflow:hidden">
+      <div style="padding:14px 18px;background:var(--surface2);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+        <div style="font-size:13px;font-weight:700">Team Members (${cons.length})</div>
+      </div>
+      <table style="width:100%;border-collapse:collapse">
+        <thead><tr>
+          <th style="padding:10px 18px;text-align:left;font-size:10px;font-weight:700;color:var(--text3);letter-spacing:.08em;text-transform:uppercase;border-bottom:1px solid var(--border)">Name</th>
+          <th style="padding:10px 18px;text-align:left;font-size:10px;font-weight:700;color:var(--text3);letter-spacing:.08em;text-transform:uppercase;border-bottom:1px solid var(--border)">Username</th>
+          <th style="padding:10px 18px;text-align:left;font-size:10px;font-weight:700;color:var(--text3);letter-spacing:.08em;text-transform:uppercase;border-bottom:1px solid var(--border)">PIN</th>
+          <th style="padding:10px 18px;text-align:center;font-size:10px;font-weight:700;color:var(--text3);letter-spacing:.08em;text-transform:uppercase;border-bottom:1px solid var(--border)">Actions</th>
+        </tr></thead>
+        <tbody>${cons.map(([id,c])=>`
+          <tr style="border-bottom:1px solid var(--border);transition:background .1s" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''">
+            <td style="padding:12px 18px;font-weight:600">
+              <div style="display:flex;align-items:center;gap:10px">
+                <div style="width:32px;height:32px;border-radius:50%;background:${avColor(id)};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:#000">${initials(c.name)}</div>
+                ${c.name}
+              </div>
+            </td>
+            <td style="padding:12px 18px;font-family:var(--fm);font-size:12px;color:var(--green)">@${c.username||'—'}</td>
+            <td style="padding:12px 18px;font-family:var(--fm);font-size:12px;color:var(--text3)">••••</td>
+            <td style="padding:12px 18px;text-align:center">
+              <div style="display:flex;gap:6px;justify-content:center">
+                <button class="btn btn-s" style="font-size:11px;padding:6px 12px" onclick="openEditConsultant('${id}')">✏️ Edit</button>
+                <button class="btn btn-s" style="font-size:11px;padding:6px 12px" onclick="viewConsultantAsManager('${id}')">👁 View</button>
+              </div>
+            </td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`:
+    '<div class="empty"><div class="empty-icon">👥</div><div class="empty-msg">No consultants yet — click + Add Consultant to get started</div></div>';
+}
+
+function openAddConsultantModal(){
+  document.getElementById('consultantModalTitle').textContent='Add Consultant';
+  document.getElementById('cName').value='';
+  document.getElementById('cUsername').value='';
+  document.getElementById('cPin').value='';
+  document.getElementById('cEditId').value='';
+  document.getElementById('cDeleteBtn').style.display='none';
+  document.getElementById('addConsultantModal').classList.add('open');
+}
+
+function openEditConsultant(id){
+  const c=DATA.consultants[id];
+  document.getElementById('consultantModalTitle').textContent='Edit Consultant';
+  document.getElementById('cName').value=c.name||'';
+  document.getElementById('cUsername').value=c.username||'';
+  document.getElementById('cPin').value=c.pin||'';
+  document.getElementById('cEditId').value=id;
+  document.getElementById('cDeleteBtn').style.display='inline-flex';
+  document.getElementById('addConsultantModal').classList.add('open');
+}
+
+function saveConsultant(){
+  const name=document.getElementById('cName').value.trim();
+  const username=document.getElementById('cUsername').value.trim().toLowerCase();
+  const pin=document.getElementById('cPin').value.trim();
+  const editId=document.getElementById('cEditId').value;
+  if(!name||!username){ showToast('Name and username required','err'); return; }
+  if(pin&&pin.length<4){ showToast('PIN must be at least 4 digits','err'); return; }
+  if(!DATA.consultants) DATA.consultants={};
+  const id=editId||uid();
+  const existing=DATA.consultants[id]||{};
+  DATA.consultants[id]={...existing, name, username, pin:pin||(existing.pin||'1234'), active:true};
+  saveConsultants();
+  closeModal('addConsultantModal');
+  renderManage();
+  showToast(editId?name+' updated':name+' added');
+}
+
+function deleteConsultant(){
+  const id=document.getElementById('cEditId').value;
+  const c=DATA.consultants[id];
+  if(!confirm('Remove '+c.name+'? Their tracking data will be kept in Firebase.')) return;
+  DATA.consultants[id].active=false;
+  saveConsultants();
+  closeModal('addConsultantModal');
+  renderManage();
+  showToast(c.name+' removed');
+}
+
+function changeManagerPin(){
+  const p=document.getElementById('changePinInput').value;
+  const c=document.getElementById('changePinConfirm').value;
+  if(p.length<4){ showToast('PIN must be at least 4 digits','err'); return; }
+  if(p!==c){ showToast('PINs do not match','err'); return; }
+  DATA.config.managerPin=p;
+  saveConfig();
+  document.getElementById('changePinInput').value='';
+  document.getElementById('changePinConfirm').value='';
+  showToast('Manager PIN updated');
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// UTILS
+// ═══════════════════════════════════════════════════════════════════
+function closeModal(id){ document.getElementById(id).classList.remove('open'); }
+function showToast(msg,type='ok'){
+  const t=document.getElementById('toast');
+  t.textContent=msg;
+  t.style.background=type==='err'?'var(--red)':'var(--green)';
+  t.style.color=type==='err'?'#fff':'#000';
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),2800);
+}
+
+// Close modals on overlay click
+document.querySelectorAll('.modal-overlay').forEach(o=>{
+  o.addEventListener('click',e=>{ if(e.target===o) o.classList.remove('open'); });
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// FIREBASE BOOT
+// ═══════════════════════════════════════════════════════════════════
+setSyncStatus('connecting');
+ref.once('value').then(snap=>{
+  const d=snap.val()||{};
+  DATA.config     = d.config     || {managerPin:'1234'};
+  DATA.consultants= d.consultants|| {};
+  DATA.data       = d.data       || {};
+
+  // Live listener
+  ref.on('value', snap2=>{
+    const d2=snap2.val()||{};
+    DATA.config     = d2.config      || DATA.config;
+    DATA.consultants= d2.consultants || {};
+    DATA.data       = d2.data        || {};
+    setSyncStatus('live');
+    // Re-render if on a live page
+    if(SESSION.role==='consultant'&&document.getElementById('page-tracker').classList.contains('active')) renderTracker();
+    if(SESSION.role==='manager'&&document.getElementById('page-team').classList.contains('active')) renderTeamOverview();
+  });
+
+  setSyncStatus('live');
+  // Hide loading, show login
+  setTimeout(()=>{
+    document.getElementById('loadingScreen').style.display='none';
+    document.getElementById('loginScreen').style.display='flex';
+  }, 1200);
+}).catch(e=>{
+  setSyncStatus('err');
+  console.error('Firebase error:',e);
+  document.getElementById('loadingScreen').style.display='none';
+  document.getElementById('loginScreen').style.display='flex';
+  showToast('Firebase connection failed — check config','err');
+});
+</script>
+</body>
+</html>
