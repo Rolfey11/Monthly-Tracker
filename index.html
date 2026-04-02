@@ -142,6 +142,8 @@ table.daily{width:100%;border-collapse:collapse;min-width:700px;}
 table.daily thead th{background:var(--surface2);color:var(--text3);font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:10px 14px;border-bottom:1px solid var(--border);text-align:left;white-space:nowrap;}
 table.daily tbody tr{border-bottom:1px solid var(--border);transition:background .1s;}
 table.daily tbody tr:hover{background:var(--surface2);}
+table.daily tbody tr.holiday-row td{ opacity:.6; }
+table.daily tbody tr.holiday-row td:first-child{ border-left:2px solid var(--amber); }
 table.daily tbody tr.weekend{opacity:.4;}
 table.daily tbody tr.today td:first-child{border-left:2px solid var(--green);}
 table.daily tbody tr.has-data{background:rgba(0,214,143,.03);}
@@ -374,6 +376,49 @@ table.daily tfoot td{padding:10px 14px;font-weight:700;font-family:var(--fm);fon
     <div class="mgr-grid" id="teamGrid"></div>
   </div>
 
+  <!-- CONSULTANT: SETTINGS -->
+  <div class="page" id="page-settings">
+    <div class="page-head">
+      <div>
+        <div class="page-title">Settings</div>
+        <div class="page-sub">Configure your personal tracking rates and working days</div>
+      </div>
+    </div>
+    <div style="max-width:600px">
+      <div class="setup-card">
+        <div class="setup-title">📅 Working Days</div>
+        <div class="field" style="margin-bottom:8px">
+          <div class="field-lbl">Lapsed working days this month</div>
+          <div style="display:flex;align-items:center;gap:12px;margin-top:6px">
+            <input type="number" id="settingsElapsed" min="0" max="31" placeholder="e.g. 3" style="width:120px" oninput="previewSettings()">
+            <span style="font-size:12px;color:var(--text3)">Override the auto-calculated elapsed days</span>
+          </div>
+          <div style="font-size:11px;color:var(--text3);margin-top:6px;font-family:var(--fm)">Auto-calculated: <span id="autoElapsed">—</span> days · leave blank to use auto</div>
+        </div>
+      </div>
+      <div class="setup-card">
+        <div class="setup-title">⚡ Daily Rates</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+          <div class="field">
+            <div class="field-lbl">Risk per day (£)</div>
+            <input type="number" id="settingsRpd" min="0" placeholder="e.g. 1800" oninput="previewSettings()">
+            <div style="font-size:10px;color:var(--text3);margin-top:4px">Used for COP Risk &amp; accumulated target in daily log</div>
+          </div>
+          <div class="field">
+            <div class="field-lbl">Needs Met per day</div>
+            <input type="number" id="settingsNmPd" min="0" step="0.1" placeholder="e.g. 1.75" oninput="previewSettings()">
+            <div style="font-size:10px;color:var(--text3);margin-top:4px">Used for COP NM &amp; accumulated NM target in daily log</div>
+          </div>
+        </div>
+      </div>
+      <div class="setup-card" id="settingsPreview" style="display:none">
+        <div class="setup-title">👁 Preview — with current settings</div>
+        <div id="settingsPreviewContent"></div>
+      </div>
+      <button class="btn btn-p" onclick="saveSettings()" style="width:100%;margin-top:4px">Save Settings</button>
+    </div>
+  </div>
+
   <!-- MANAGER: MANAGE CONSULTANTS -->
   <div class="page" id="page-manage">
     <div class="page-head">
@@ -521,7 +566,7 @@ function workingDaysInMonth(mk){
   }
   return count;
 }
-function workingDaysElapsed(mk){
+function workingDaysElapsed(mk, holidayDates=new Set()){
   const today=new Date().toISOString().slice(0,10);
   const [y,m]=mk.split('-').map(Number);
   let count=0;
@@ -529,7 +574,7 @@ function workingDaysElapsed(mk){
     const ds=mk+'-'+String(d).padStart(2,'0');
     if(ds>today) break;
     const dow=new Date(ds+'T12:00:00').getDay();
-    if(dow!==0&&dow!==6&&!UK_BH.has(ds)) count++;
+    if(dow!==0&&dow!==6&&!UK_BH.has(ds)&&!holidayDates.has(ds)) count++;
   }
   return count;
 }
@@ -654,7 +699,9 @@ function enterApp(){
       <button class="nav-tab" onclick="showPage('manage')">⚙️ Manage Consultants</button>`;
     showPage('team');
   } else {
-    tabs.innerHTML=`<button class="nav-tab active" onclick="showPage('tracker')">📈 My Tracker</button>`;
+    tabs.innerHTML=`
+      <button class="nav-tab active" onclick="showPage('tracker')">📈 My Tracker</button>
+      <button class="nav-tab" onclick="showPage('settings')">⚙️ Settings</button>`;
     VIEW_MK=ACTIVE_MK=todayKey();
     // Auto-create month entry if needed
     ensureMonthExists(SESSION.consultantId, ACTIVE_MK);
@@ -670,6 +717,7 @@ function showPage(p){
   if(p==='tracker') renderTracker();
   else if(p==='team') renderTeamOverview();
   else if(p==='manage') renderManage();
+  else if(p==='settings') renderSettings();
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -736,33 +784,46 @@ function saveMonthSetup(){
 // ═══════════════════════════════════════════════════════════════════
 function calcStats(cid, mk){
   const d=(DATA.data[cid]||{})[mk]||{target:0,targetedDays:0,entries:{}};
+  const settings=(DATA.data[cid]||{}).settings||{};
   const entries=Object.values(d.entries||{});
   const target=d.target||0;
   const targetedDays=d.targetedDays||0;
-  const rpd=targetedDays>0?target/targetedDays:0;
+
+  // Use settings rpd if set, else derive from target/days
+  const rpdSetting=settings.rpd>0?settings.rpd:0;
+  const rpd=rpdSetting>0?rpdSetting:(targetedDays>0?target/targetedDays:0);
+
+  // NM per day from settings or default 1.75
+  const nmPd=settings.nmPd>0?settings.nmPd:1.75;
 
   const currentRisk=entries.reduce((s,e)=>s+(e.risk||0),0);
   const needsMet=entries.reduce((s,e)=>s+(e.nm||0),0);
-  const daysWorked=entries.filter(e=>(e.risk||0)>0).length;
+  // Days worked = non-holiday days with any entry data (risk or nm)
+  const holidayDates=new Set(Object.values(d.entries||{}).filter(e=>e.holiday).map(e=>e.date));
+  const daysWorked=entries.filter(e=>!e.holiday&&((e.risk||0)>0||(e.nm||0)>0)).length;
   const rpdActual=daysWorked>0?currentRisk/daysWorked:0;
 
-  const elapsed=workingDaysElapsed(mk);
+  // Elapsed: use manual override if set, else auto-calculate minus holidays
+  const autoElapsed=workingDaysElapsed(mk, holidayDates);
+  const elapsed=settings.elapsedOverride>0?settings.elapsedOverride:autoElapsed;
   const totalWD=workingDaysInMonth(mk);
   const remaining=Math.max(0,totalWD-elapsed);
 
-  const copCheckpoint=(elapsed+1)*rpd;
+  // COP based on elapsed full days + current partial day
+  // If on day N (N days elapsed), checkpoint = N * rpd
+  const copCheckpoint=elapsed*rpd;
   const copRiskNeeded=copCheckpoint-currentRisk;
-  const copNmNeeded=((elapsed+1)*1.75)-needsMet;
+  const copNmNeeded=(elapsed*nmPd)-needsMet;
 
   const rpdNeeded=remaining>0?(target-currentRisk)/remaining:0;
 
   const pct=target>0?Math.round(currentRisk/target*100):0;
   const bands=[25,50,75,100].map(b=>({pct:b,val:Math.round(target*b/100),achieved:currentRisk>=(target*b/100)}));
 
-  return {target,targetedDays,rpd,currentRisk,needsMet,daysWorked,rpdActual,
-          elapsed,totalWD,remaining,copRiskNeeded,copNmNeeded,rpdNeeded,pct,bands,
-          forTarget:Math.max(0,target-currentRisk),entries:d.entries||{},
-          raw:d};
+  return {target,targetedDays,rpd,nmPd,currentRisk,needsMet,daysWorked,rpdActual,
+          elapsed,autoElapsed,totalWD,remaining,copRiskNeeded,copNmNeeded,rpdNeeded,pct,bands,
+          forTarget:Math.max(0,target-currentRisk),entries:d.entries||{},holidayDates,
+          raw:d,settings};
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -803,7 +864,7 @@ function renderTracker(){
     <div class="kpi ${stats.pct>=75?'g':stats.pct>=50?'a':'r'}">
       <div class="kpi-lbl">Current Risk</div>
       <div class="kpi-val ${stats.pct>=75?'g':stats.pct>=50?'a':'r'}">£${Math.round(stats.currentRisk).toLocaleString()}</div>
-      <div class="kpi-sub">${stats.pct}% of target</div>
+      <div class="kpi-sub">${stats.daysWorked} of ${stats.elapsed} elapsed days worked</div>
     </div>
     <div class="kpi b">
       <div class="kpi-lbl">Monthly Target</div>
@@ -813,22 +874,22 @@ function renderTracker(){
     <div class="kpi">
       <div class="kpi-lbl">Needs Met</div>
       <div class="kpi-val">${stats.needsMet}</div>
-      <div class="kpi-sub">target: ${(stats.targetedDays*1.75).toFixed(1)}</div>
+      <div class="kpi-sub">target: ${(stats.targetedDays*stats.nmPd).toFixed(1)}</div>
     </div>
     <div class="kpi ${cr<=0?'g':cr<stats.rpd?'a':'r'}">
       <div class="kpi-lbl">COP Risk</div>
       <div class="kpi-val ${cr<=0?'g':cr<stats.rpd?'a':'r'}">${cr<=0?'+£'+Math.round(Math.abs(cr)).toLocaleString():'£'+Math.round(cr).toLocaleString()}</div>
-      <div class="kpi-sub">${cr<=0?'ahead of checkpoint':'needed by checkpoint'}</div>
+      <div class="kpi-sub">${cr<=0?'ahead of checkpoint':'needed · '+stats.elapsed+' days × £'+Math.round(stats.rpd)}</div>
     </div>
-    <div class="kpi ${cn<=0?'g':cn<1.75?'a':'r'}">
+    <div class="kpi ${cn<=0?'g':cn<stats.nmPd?'a':'r'}">
       <div class="kpi-lbl">COP NM</div>
-      <div class="kpi-val ${cn<=0?'g':cn<1.75?'a':'r'}">${cn<=0?'+'+Math.abs(cn).toFixed(1):cn.toFixed(1)}</div>
-      <div class="kpi-sub">${cn<=0?'ahead of checkpoint':'needed by checkpoint'}</div>
+      <div class="kpi-val ${cn<=0?'g':cn<stats.nmPd?'a':'r'}">${cn<=0?'+'+Math.abs(cn).toFixed(1):cn.toFixed(1)}</div>
+      <div class="kpi-sub">${cn<=0?'ahead of checkpoint':'needed · '+stats.elapsed+' days × '+stats.nmPd}</div>
     </div>
     <div class="kpi ${stats.remaining>0?'gold':'g'}">
       <div class="kpi-lbl">Days Left</div>
       <div class="kpi-val gold">${stats.remaining}</div>
-      <div class="kpi-sub">${stats.elapsed} of ${stats.totalWD} worked</div>
+      <div class="kpi-sub">${stats.elapsed} elapsed${stats.settings&&stats.settings.elapsedOverride>0?' (manual)':' (auto)'}</div>
     </div>`;
 
   // Bands
@@ -856,7 +917,7 @@ function renderTracker(){
     </div>`;
 
   // Stats panels
-  const rpd=stats.rpd>0?'£'+stats.rpd.toFixed(2):'—';
+  const rpd=stats.rpd>0?'£'+stats.rpd.toFixed(2):'— (set in Settings)';
   const rpdA=stats.rpdActual>0?'£'+stats.rpdActual.toFixed(2):'—';
   const rpdN=stats.rpdNeeded>0?'£'+stats.rpdNeeded.toFixed(2):'—';
   document.getElementById('statsGrid').innerHTML=`
@@ -865,7 +926,7 @@ function renderTracker(){
       <div class="stat-row"><span class="stat-lbl">Monthly Target</span><span class="stat-val">£${Math.round(stats.target).toLocaleString()}</span></div>
       <div class="stat-row"><span class="stat-lbl">Targeted Days</span><span class="stat-val">${stats.targetedDays}</span></div>
       <div class="stat-row"><span class="stat-lbl">Days Worked</span><span class="stat-val">${stats.daysWorked}</span></div>
-      <div class="stat-row"><span class="stat-lbl">Working Days Elapsed</span><span class="stat-val">${stats.elapsed}</span></div>
+      <div class="stat-row"><span class="stat-lbl">Working Days Elapsed</span><span class="stat-val">${stats.elapsed}${stats.settings&&stats.settings.elapsedOverride>0?' <span style="font-size:10px;color:var(--amber)">[manual]</span>':''}</span></div>
       <div class="stat-row"><span class="stat-lbl">Remaining Working Days</span><span class="stat-val ${stats.remaining<=3?'r':''}">${stats.remaining}</span></div>
       <div class="stat-row"><span class="stat-lbl">For Target Remaining</span><span class="stat-val ${stats.forTarget<=0?'g':'r'}">£${Math.round(stats.forTarget).toLocaleString()}</span></div>
     </div>
@@ -897,24 +958,51 @@ function renderDailyTable(cid, mk, readOnly, stats){
   const numDays=new Date(y,m,0).getDate();
   const today=new Date().toISOString().slice(0,10);
   const entries=stats.entries;
+  const rpd=stats.rpd||0;
+  const nmPd=stats.nmPd||1.75;
 
-  let cumRisk=0,cumNm=0;
+  let cumRisk=0,cumNm=0,accumTarget=0,accumNmTarget=0;
+  let workingDayCount=0; // running count of elapsed working days for accumulated target
   let rows='';
   for(let d=1;d<=numDays;d++){
     const ds=mk+'-'+String(d).padStart(2,'0');
     const dow=new Date(ds+'T12:00:00').getDay();
     const wknd=dow===0||dow===6;
     const bh=UK_BH.has(ds);
-    const entry=Object.values(entries).find(e=>e.date===ds)||{date:ds,risk:0,nm:0,swift:'',plps:''};
+    const entry=Object.values(entries).find(e=>e.date===ds)||{date:ds,risk:0,nm:0,swift:'',plps:'',holiday:false};
     const eId=Object.keys(entries).find(k=>entries[k].date===ds)||null;
     const risk=entry.risk||0;
     const nm=entry.nm||0;
-    if(!wknd&&!bh){ cumRisk+=risk; cumNm+=nm; }
+    const isHoliday=!!(entry.holiday);
+    const isPast=ds<=today;
+
+    if(!wknd&&!bh&&!isHoliday){ cumRisk+=risk; cumNm+=nm; }
+
+    // Accumulated target: count this day if it's a non-weekend, non-BH, non-holiday working day that has elapsed
+    let showAccum=false;
+    if(!wknd&&!bh&&!isHoliday&&isPast){
+      workingDayCount++;
+      accumTarget=workingDayCount*rpd;
+      accumNmTarget=workingDayCount*nmPd;
+      showAccum=true;
+    }
+
+    const riskDiff=showAccum?(cumRisk-accumTarget):null;
+    const nmDiff=showAccum?(cumNm-accumNmTarget):null;
+
     const isToday=ds===today;
     const hasData=risk>0||nm>0;
-    const rowCls=[wknd?'weekend':'',isToday?'today':'',hasData&&!wknd?'has-data':''].join(' ');
-    const label=wknd?`<span style="opacity:.4">${fmtDate(ds)}</span>`:bh?`${fmtDate(ds)} <span style="font-size:9px;color:var(--amber)">[BH]</span>`:fmtDate(ds);
-    const bgStyle=wknd||bh?'background:var(--surface2);':isToday?'background:rgba(0,214,143,.04);':'';
+    const rowCls=[wknd?'weekend':'',isToday?'today':'',hasData&&!wknd?'has-data':'',isHoliday?'holiday-row':''].join(' ');
+    const label=wknd?`<span style="opacity:.4">${fmtDate(ds)}</span>`:
+                bh?`${fmtDate(ds)} <span style="font-size:9px;color:var(--amber)">[BH]</span>`:
+                isHoliday?`${fmtDate(ds)} <span style="font-size:9px;color:var(--amber)">[HOL]</span>`:
+                fmtDate(ds);
+    const bgStyle=isHoliday?'background:rgba(255,181,71,0.06);':wknd||bh?'background:var(--surface2);':isToday?'background:rgba(0,214,143,.04);':'';
+
+    const riskDiffCell=riskDiff!==null?`<td class="running" style="color:${riskDiff>=0?'var(--green)':'var(--red)'}">${riskDiff>=0?'+':''}£${Math.round(Math.abs(riskDiff)).toLocaleString()}${riskDiff<0?' ▼':' ▲'}</td>`:`<td></td>`;
+    const nmDiffCell=nmDiff!==null?`<td class="running" style="color:${nmDiff>=0?'var(--green)':'var(--red)'}">${nmDiff>=0?'+':''}${nmDiff.toFixed(1)}${nmDiff<0?' ▼':' ▲'}</td>`:`<td></td>`;
+    const accumTargetCell=showAccum?`<td class="running" style="color:var(--text3)">£${Math.round(accumTarget).toLocaleString()}</td>`:`<td></td>`;
+    const accumNmCell=showAccum?`<td class="running" style="color:var(--text3)">${accumNmTarget.toFixed(1)}</td>`:`<td></td>`;
 
     if(readOnly||wknd||bh){
       rows+=`<tr class="${rowCls}" style="${bgStyle}">
@@ -923,10 +1011,18 @@ function renderDailyTable(cid, mk, readOnly, stats){
         <td>${nm>0?nm:''}</td>
         <td style="color:var(--text3);font-size:11px">${entry.swift||''}</td>
         <td>${entry.plps||''}</td>
-        <td class="running ${cumRisk>0?'pos':''}">${!wknd&&!bh&&cumRisk>0?'£'+Math.round(cumRisk).toLocaleString():''}</td>
-        <td class="running ${cumNm>0?'pos':''}">${!wknd&&!bh&&cumNm>0?cumNm:''}</td>
+        <td class="running ${cumRisk>0?'pos':''}">${!wknd&&!bh&&!isHoliday&&cumRisk>0?'£'+Math.round(cumRisk).toLocaleString():''}</td>
+        ${accumTargetCell}
+        ${riskDiffCell}
+        <td class="running ${cumNm>0?'pos':''}">${!wknd&&!bh&&!isHoliday&&cumNm>0?cumNm:''}</td>
+        ${accumNmCell}
+        ${nmDiffCell}
+        <td></td>
       </tr>`;
     } else {
+      const hBtnStyle=isHoliday
+        ?'background:var(--amber-dim);color:var(--amber);border-color:rgba(255,181,71,.4);font-weight:700;'
+        :'';
       rows+=`<tr class="${rowCls}" style="${bgStyle}" id="row-${ds}">
         <td class="day-lbl">${label}</td>
         <td><input type="number" value="${risk||''}" placeholder="0" min="0" step="0.01"
@@ -939,7 +1035,13 @@ function renderDailyTable(cid, mk, readOnly, stats){
         <td><input type="text" value="${entry.plps||''}" placeholder="—"
           onchange="updateEntry('${cid}','${mk}','${ds}','plps',this.value,'${eId||''}')"></td>
         <td class="running ${cumRisk>0?'pos':''}">${cumRisk>0?'£'+Math.round(cumRisk).toLocaleString():''}</td>
+        ${accumTargetCell}
+        ${riskDiffCell}
         <td class="running ${cumNm>0?'pos':''}">${cumNm>0?cumNm:''}</td>
+        ${accumNmCell}
+        ${nmDiffCell}
+        <td><button class="btn btn-s" style="font-size:10px;padding:3px 8px;${hBtnStyle}" title="${isHoliday?'Remove holiday':'Mark as holiday'}"
+          onclick="toggleHoliday('${cid}','${mk}','${ds}','${eId||''}')">H</button></td>
       </tr>`;
     }
   }
@@ -948,7 +1050,7 @@ function renderDailyTable(cid, mk, readOnly, stats){
     <div class="tbl-head-bar">
       <div>
         <div class="tbl-head-title">Daily Log — ${monthLabel(mk)}</div>
-        <div class="tbl-head-sub">Click any cell to edit · data saves automatically</div>
+        <div class="tbl-head-sub">Click any cell to edit · press H to mark a holiday day (excludes from all calculations) · data saves automatically</div>
       </div>
       <span class="save-indicator" id="saveInd">✓ Saved</span>
     </div>
@@ -961,7 +1063,12 @@ function renderDailyTable(cid, mk, readOnly, stats){
           <th>SWIFT Refs</th>
           <th>PLPs</th>
           <th>Running Risk</th>
+          <th>Target Risk</th>
+          <th>Risk Diff</th>
           <th>Running NM</th>
+          <th>Target NM</th>
+          <th>NM Diff</th>
+          <th style="width:42px"></th>
         </tr></thead>
         <tbody>${rows}</tbody>
         <tfoot><tr>
@@ -970,7 +1077,16 @@ function renderDailyTable(cid, mk, readOnly, stats){
           <td>${stats.needsMet}</td>
           <td colspan="2"></td>
           <td style="color:${stats.pct>=100?'var(--green)':stats.pct>=75?'var(--blue)':'var(--amber)'}">£${Math.round(stats.currentRisk).toLocaleString()}</td>
+          <td style="color:var(--text3)">£${Math.round(accumTarget).toLocaleString()}</td>
+          <td style="color:${cumRisk-accumTarget>=0?'var(--green)':'var(--red)'}">
+            ${accumTarget>0?(cumRisk-accumTarget>=0?'+':'')+' £'+Math.round(Math.abs(cumRisk-accumTarget)).toLocaleString():'—'}
+          </td>
           <td>${stats.needsMet}</td>
+          <td style="color:var(--text3)">${accumNmTarget.toFixed(1)}</td>
+          <td style="color:${cumNm-accumNmTarget>=0?'var(--green)':'var(--red)'}">
+            ${accumNmTarget>0?(cumNm-accumNmTarget>=0?'+':'')+' '+Math.abs(cumNm-accumNmTarget).toFixed(1):'—'}
+          </td>
+          <td></td>
         </tr></tfoot>
       </table>
     </div>`;
@@ -990,7 +1106,74 @@ function updateEntry(cid,mk,ds,field,val,existingId){
   deboundSave(cid,mk);
 }
 
-let _saveTimers={};
+function toggleHoliday(cid,mk,ds,existingId){
+  ensureMonthExists(cid,mk);
+  const entries=DATA.data[cid][mk].entries||{};
+  let eId=existingId||Object.keys(entries).find(k=>entries[k].date===ds);
+  if(!eId){ eId=uid(); }
+  if(!entries[eId]) entries[eId]={date:ds,risk:0,nm:0,swift:'',plps:'',holiday:false};
+  entries[eId].holiday=!entries[eId].holiday;
+  DATA.data[cid][mk].entries=entries;
+  deboundSave(cid,mk);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// SETTINGS
+// ═══════════════════════════════════════════════════════════════════
+function renderSettings(){
+  const cid=SESSION.consultantId;
+  const settings=(DATA.data[cid]||{}).settings||{};
+  const autoEl=workingDaysElapsed(VIEW_MK);
+  document.getElementById('autoElapsed').textContent=autoEl;
+  document.getElementById('settingsElapsed').value=settings.elapsedOverride>0?settings.elapsedOverride:'';
+  document.getElementById('settingsRpd').value=settings.rpd>0?settings.rpd:'';
+  document.getElementById('settingsNmPd').value=settings.nmPd>0?settings.nmPd:'';
+  previewSettings();
+}
+
+function previewSettings(){
+  const cid=SESSION.consultantId;
+  if(!cid) return;
+  const elIn=parseFloat(document.getElementById('settingsElapsed').value)||0;
+  const rpdIn=parseFloat(document.getElementById('settingsRpd').value)||0;
+  const nmPdIn=parseFloat(document.getElementById('settingsNmPd').value)||0;
+  const autoEl=workingDaysElapsed(VIEW_MK);
+  const elapsed=elIn>0?elIn:autoEl;
+  const rpd=rpdIn>0?rpdIn:0;
+  const nmPd=nmPdIn>0?nmPdIn:1.75;
+  const stats=calcStats(cid,VIEW_MK);
+  const cop=elapsed*rpd-stats.currentRisk;
+  const copNm=elapsed*nmPd-stats.needsMet;
+  const prev=document.getElementById('settingsPreview');
+  const content=document.getElementById('settingsPreviewContent');
+  if(rpd>0){
+    prev.style.display='block';
+    content.innerHTML=`
+      <div class="stat-row"><span class="stat-lbl">Elapsed days used</span><span class="stat-val">${elapsed} days${elIn>0?' (manual)':' (auto)'}</span></div>
+      <div class="stat-row"><span class="stat-lbl">Risk per day</span><span class="stat-val">£${rpd.toLocaleString()}</span></div>
+      <div class="stat-row"><span class="stat-lbl">NM per day</span><span class="stat-val">${nmPd}</span></div>
+      <div class="stat-row"><span class="stat-lbl">COP Risk (${elapsed} days × £${rpd})</span><span class="stat-val ${cop<=0?'g':'r'}">${cop<=0?'Ahead +£'+Math.round(Math.abs(cop)).toLocaleString():'£'+Math.round(cop).toLocaleString()+' needed'}</span></div>
+      <div class="stat-row"><span class="stat-lbl">COP NM (${elapsed} days × ${nmPd})</span><span class="stat-val ${copNm<=0?'g':'r'}">${copNm<=0?'Ahead +'+(Math.abs(copNm).toFixed(1)):copNm.toFixed(1)+' needed'}</span></div>`;
+  } else {
+    prev.style.display='none';
+  }
+}
+
+function saveSettings(){
+  const cid=SESSION.consultantId;
+  if(!cid) return;
+  if(!DATA.data[cid]) DATA.data[cid]={};
+  DATA.data[cid].settings={
+    elapsedOverride:parseFloat(document.getElementById('settingsElapsed').value)||0,
+    rpd:parseFloat(document.getElementById('settingsRpd').value)||0,
+    nmPd:parseFloat(document.getElementById('settingsNmPd').value)||0
+  };
+  ref.child('data/'+cid+'/settings').set(DATA.data[cid].settings,err=>{
+    if(!err) showToast('Settings saved');
+    else showToast('Save failed','err');
+  });
+  renderTracker();
+}
 function deboundSave(cid,mk){
   const key=cid+'_'+mk;
   clearTimeout(_saveTimers[key]);
@@ -1258,6 +1441,7 @@ ref.once('value').then(snap=>{
     setSyncStatus('live');
     // Re-render if on a live page
     if(SESSION.role==='consultant'&&document.getElementById('page-tracker').classList.contains('active')) renderTracker();
+    if(SESSION.role==='consultant'&&document.getElementById('page-settings').classList.contains('active')) renderSettings();
     if(SESSION.role==='manager'&&document.getElementById('page-team').classList.contains('active')) renderTeamOverview();
   });
 
